@@ -39,7 +39,25 @@
       "Bash(git checkout:*)",
       "Bash(git rm:*)",
       "Bash(git add:*)",
-      "Bash(grep -iE '\\\\.\\(pdf|png\\)$')"
+      "Bash(grep -iE '\\\\.\\(pdf|png\\)$')",
+      "Bash(grep -iE '\\\\.\\(pdf|png|sqlite3\\)$')",
+      "Bash(git commit:*)",
+      "Bash(git branch:*)",
+      "mcp__code-review-graph__get_minimal_context_tool",
+      "Bash(python -X utf8 -c \"import ast; ast.parse\\(open\\('pipeline.py', encoding='utf-8'\\).read\\(\\)\\); print\\('OK'\\)\")",
+      "Bash(tasklist //FI \"IMAGENAME eq Code.exe\")",
+      "Bash(ls -la C:/Users/so16e/Documents/vscode/python/llm_translate/.S32K3XXRM_cache*)",
+      "Bash(sqlite3 .S32K3XXRM_cache.sqlite3 \"SELECT COUNT\\(*\\) FROM translation_cache;\")",
+      "Bash(python -c \"import sqlite3; c=sqlite3.connect\\('.S32K3XXRM_cache.sqlite3'\\); print\\('entries:', c.execute\\('SELECT COUNT\\(*\\) FROM translation_cache'\\).fetchone\\(\\)[0]\\); print\\('models:', c.execute\\('SELECT DISTINCT model FROM translation_cache'\\).fetchall\\(\\)\\); print\\('langs:', c.execute\\('SELECT DISTINCT source_lang, target_lang FROM translation_cache'\\).fetchall\\(\\)\\)\")",
+      "Bash(.venv/Scripts/python.exe -X utf8 -m pytest tests/test_table_cell_encoding.py -v)",
+      "Bash(.venv/Scripts/python.exe -X utf8 -c \"import pipeline; import renderer; import client; print\\('imports OK'\\)\")",
+      "Bash(curl -s --max-time 3 http://localhost:11434/api/tags)",
+      "Bash(tasklist //FI \"IMAGENAME eq python.exe\")",
+      "Bash(.venv/Scripts/python.exe -X utf8 -u test_e2e.py S32K3XXRM.pdf 1716)",
+      "Bash(echo \"started pid=$!\")",
+      "Read(//tmp/**)",
+      "Bash(taskkill //PID 33144 //F)",
+      "Bash(.venv/Scripts/python.exe -X utf8 -c \"import pipeline; print\\('import OK'\\)\")"
     ]
   }
 }

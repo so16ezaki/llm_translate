@@ -80,25 +80,29 @@ def _build_prompt(text: str, src: str, tgt: str, hint: str | None = None) -> str
     tgt_name = _LANG_NAMES.get(tgt, tgt)
 
     if hint == "table":
-        # 表は marker なしの markdown。構造保持を最重要に指示しつつ、
-        # セル内の文章は必ず日本語化する点を明示。
+        # 表セル内の複数行は JSON 配列として渡される。構造保持を最重要に指示。
         return (
-            f"Translate the following {src_name} markdown table to {tgt_name}.\n"
-            f"Output ONLY the translated table. No explanations, no original text.\n"
+            f"Translate the following {src_name} content to {tgt_name}.\n"
+            f"Output ONLY the translated content. No explanations, no original text.\n"
             f"Rules:\n"
-            f"- Preserve the markdown table structure: same number of rows, same number of '|' per row.\n"
-            f"- Keep the '| --- | --- |' separator line unchanged.\n"
-            f"- Translate EVERY cell content. Do not leave a cell in {src_name}.\n"
+            f"- If the input is a markdown table: preserve the structure (same number of rows,\n"
+            f"  same number of '|' per row, keep the '| --- | --- |' separator unchanged).\n"
+            f"- If the input is a numbered list: keep the numbering.\n"
+            f"- Translate EVERY text content. Do not leave anything in {src_name}.\n"
             f"- Keep acronyms (PWM, SPI, CAN, ADC, MCU, GPIO, DMA, UART, CRC, etc.),\n"
             f"  register/pin/signal names, hex literals and numbers unchanged.\n"
-            f"- CRITICAL: The token ⟦NL⟧ marks a line break inside a cell. The output MUST\n"
-            f"  contain the SAME NUMBER of ⟦NL⟧ tokens as the input, in the same positions\n"
-            f"  (between the same content boundaries). Never remove, merge, translate, or\n"
-            f"  replace ⟦NL⟧. Cell layout depends on this.\n"
+            f"- CRITICAL: If a cell or item is a JSON array like [\"line1\", \"line2\", \"line3\"],\n"
+            f"  the array represents a multi-line cell. Translate each STRING element. Keep:\n"
+            f"    * the array brackets [ and ]\n"
+            f"    * the SAME NUMBER of elements (never merge, split, add, or remove elements)\n"
+            f"    * the element order\n"
+            f"    * double-quoted strings (escape \" as \\\" and \\ as \\\\)\n"
+            f"    * leading whitespace inside strings (indentation is meaningful — preserve it)\n"
+            f"  Do NOT collapse the array into a single string. Do NOT use any other separator.\n"
             f"\n"
             f"Example:\n"
-            f"  Input cell:  'Mode A⟦NL⟧00b - select bank 0⟦NL⟧01b - select bank 1⟦NL⟧'\n"
-            f"  Output cell: 'モード A⟦NL⟧00b - バンク 0 選択⟦NL⟧01b - バンク 1 選択⟦NL⟧'\n"
+            f"  Input cell:  [\"Mode A\", \"00b - select bank 0\", \"01b - select bank 1\"]\n"
+            f"  Output cell: [\"モード A\", \"00b - バンク 0 選択\", \"01b - バンク 1 選択\"]\n"
             f"\n"
             f"{text}"
         )

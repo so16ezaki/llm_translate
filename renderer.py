@@ -62,9 +62,14 @@ def _nbsp_after_bullet(line: str) -> str:
     )
 
 
-def _indent_bullets(text: str) -> str:
-    """箇条書きのサブ項目 (—/–) と継続行にインデントを付与する。"""
-    text = _join_wrapped(text)
+def _indent_bullets(text: str, *, preserve_all_newlines: bool = False) -> str:
+    """箇条書きのサブ項目 (—/–) と継続行にインデントを付与する。
+
+    preserve_all_newlines=True の場合、`_join_wrapped` による行結合をスキップする。
+    表セルのように改行構造が LLM 側で既に保証されているケース向け。
+    """
+    if not preserve_all_newlines:
+        text = _join_wrapped(text)
     lines = text.split("\n")
     result: list[str] = []
     in_sub = False
@@ -203,7 +208,7 @@ def _render_table(
             if not text or not text.strip():
                 continue
 
-            text = _indent_bullets(text)
+            text = _indent_bullets(text, preserve_all_newlines=True)
 
             cell_rect = pymupdf.Rect(cell)
             text_rect = cell_rect + (_CELL_PAD, _CELL_PAD, -_CELL_PAD, -_CELL_PAD)

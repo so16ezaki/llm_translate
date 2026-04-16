@@ -1,4 +1,5 @@
 from __future__ import annotations
+import json
 import re
 import time
 import concurrent.futures
@@ -398,14 +399,55 @@ def _join_wrapped_lines(text: str) -> str:
 
 
 # セル内改行を表す壊れにくいマーカー。
-# 旧形式の "<br>" も復元時に受け付ける (後方互換)。
+# 旧形式の "<br>" も復元時に受け付ける (後方互換・キャッシュ互換)。
 _CELL_NL = "⟦NL⟧"
+
+
+def _encode_cell_for_prompt(cell: str) -> str:
+    """複数行セルを JSON 配列文字列にエンコードする。単行セルは素のまま。
+
+    `table.extract()` が返す `\n` をそのまま配列境界として保存することで、
+    LLM は各行を独立した翻訳単位として扱える。
+    """
+    if cell is None:
+        return ""
+    lines = cell.split("\n")
+    if len(lines) <= 1:
+        return cell.strip()
+    # ensure_ascii=False で日本語/漢字もそのまま出力
+    return json.dumps([l.rstrip() for l in lines], ensure_ascii=False)
+
+
+def _decode_translated_cell(translated: str, expected_lines: int | None = None) -> str:
+    """LLM が返したセル文字列を実改行テキストに復元する。
+
+    優先順:
+      1. JSON 配列 (`[".."]`) → json.loads で復元
+      2. 旧マーカー (`⟦NL⟧` / `<br>`) → `_restore_cell_newlines`
+      3. その他 → そのまま返す
+    """
+    if not translated:
+        return ""
+    s = translated.strip()
+    if s.startswith("[") and s.endswith("]"):
+        try:
+            arr = json.loads(s)
+            if isinstance(arr, list) and all(isinstance(x, str) for x in arr):
+                if expected_lines is not None and len(arr) != expected_lines:
+                    print(
+                        f"    [warn] cell array length mismatch: "
+                        f"expected={expected_lines} got={len(arr)}"
+                    )
+                return "\n".join(arr)
+        except json.JSONDecodeError:
+            pass
+    return _restore_cell_newlines(s)
 
 
 def _table_to_markdown(data: list[list[str]]) -> str:
     if not data:
         return ""
-    clean = [[_join_wrapped_lines(c).replace("\n", _CELL_NL).strip() if c else "" for c in row] for row in data]
+    clean = [[_encode_cell_for_prompt(c or "") for c in row] for row in data]
     lines = []
     lines.append("| " + " | ".join(clean[0]) + " |")
     lines.append("| " + " | ".join("---" for _ in clean[0]) + " |")
@@ -415,13 +457,8 @@ def _table_to_markdown(data: list[list[str]]) -> str:
 
 
 def _restore_cell_newlines(text: str) -> str:
-    """セル内改行マーカーを実改行に戻す (新旧両方式対応)。"""
+    """セル内改行マーカーを実改行に戻す (旧形式用・キャッシュ互換)。"""
     return text.replace(_CELL_NL, "\n").replace("<br>", "\n")
-
-
-def _fallback_rows(data: list[list[str]]) -> list[list[str]]:
-    """表データをそのまま正規化して返す（翻訳失敗時のフォールバック）。"""
-    return [[_join_wrapped_lines(c).strip() if c else "" for c in row] for row in data]
 
 
 def _needs_translation(text: str) -> bool:
@@ -448,15 +485,16 @@ def _translate_table_cells(
 ) -> tuple[list[list[str]], int]:
     """広い表を構造保持しつつコンテキスト付きで翻訳する。
 
-    1. 表全体を Markdown 化して LLM にコンテキストとして与える
-    2. 翻訳が必要なセルだけを番号付きリストで送信
-    3. 番号付きリストの応答をパースして元のセルにマッピング
+    1. 翻訳対象セルを番号付きリストで送信。複数行セルは JSON 配列化。
+    2. LLM 応答をパースして元のセルにマッピング。
+    3. 複数行セルは `_decode_translated_cell` で JSON → 実改行に復元。
     """
     import re
 
-    # 正規化した表データ（折り返し行を結合、bullet 改行は保持）
+    # table.extract() が返す生データをそのまま保持 (merge しない)
+    # 各セルは末尾ホワイトスペースのみ除去
     clean_data = [
-        [_join_wrapped_lines(c or "").strip() for c in row]
+        [(c or "").rstrip() for c in row]
         for row in data
     ]
 
@@ -470,18 +508,17 @@ def _translate_table_cells(
     if not targets:
         return clean_data, 0
 
-    # 番号付きリストで翻訳依頼
-    # translate_markdown() が翻訳指示を自動付加するため、
-    # ここではコンテキスト概要と対象リストだけ渡す
-    # (表の Markdown を含めると LLM が全体を翻訳してしまうため除外)
+    # 番号付きリストで翻訳依頼。複数行セルは JSON 配列で送る。
     header_cells = [c for c in clean_data[0] if c] if clean_data else []
     col_hint = ", ".join(h.replace("\n", " ") for h in header_cells[:5])
     items = "\n".join(
-        f"{i+1}. {t[2].replace(chr(10), _CELL_NL)}" for i, t in enumerate(targets)
+        f"{i+1}. {_encode_cell_for_prompt(t[2])}" for i, t in enumerate(targets)
     )
     prompt = (
         f"Context: technical table (columns: {col_hint}, ...).\n"
-        f"Keep the numbering. Translate each item:\n\n"
+        f"Keep the numbering. Items marked as JSON arrays must stay as arrays "
+        f"with the same element count; translate each string element.\n"
+        f"Translate each item:\n\n"
         f"{items}"
     )
     translated, ok = client.translate_markdown(prompt, hint="table")
@@ -489,19 +526,26 @@ def _translate_table_cells(
     if not ok:
         return clean_data, 1
 
-    # 番号付きリストをパース
-    lines = translated.strip().split("\n")
+    # 番号付きリストをパース。JSON 配列が複数行にまたがる可能性があるため、
+    # "\nN." を次項目の境界として分割する。
     mapping: dict[int, str] = {}
-    for line in lines:
-        m = re.match(r"(\d+)\.\s*(.*)", line.strip())
-        if m:
-            mapping[int(m.group(1))] = m.group(2).strip()
+    item_re = re.compile(r"(?:^|\n)(\d+)\.\s*", re.DOTALL)
+    matches = list(item_re.finditer(translated))
+    for i, m in enumerate(matches):
+        num = int(m.group(1))
+        start = m.end()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(translated)
+        body = translated[start:end].strip()
+        if body:
+            mapping[num] = body
 
     fail = 0
     for i, (ri, ci, orig) in enumerate(targets):
         num = i + 1
         if num in mapping and mapping[num]:
-            clean_data[ri][ci] = _restore_cell_newlines(mapping[num])
+            orig_line_count = len(orig.split("\n")) if "\n" in orig else 1
+            expected = orig_line_count if orig_line_count > 1 else None
+            clean_data[ri][ci] = _decode_translated_cell(mapping[num], expected)
         else:
             # パース失敗 → 元テキストのまま
             fail += 1
@@ -518,7 +562,7 @@ def _parse_markdown_table(md: str, expected_cols: int) -> list[list[str]] | None
             continue
         if "|" not in line:
             continue
-        cells = [_restore_cell_newlines(c.strip()) for c in line.strip().strip("|").split("|")]
+        cells = [_decode_translated_cell(c.strip()) for c in line.strip().strip("|").split("|")]
         if len(cells) == expected_cols:
             rows.append(cells)
     return rows if rows else None
@@ -879,11 +923,34 @@ def _render_chunk(
 
 
 def _save_doc(doc: pymupdf.Document, out_path) -> float:
-    """doc を保存し、所要時間を返す。"""
+    """doc を保存し、所要時間を返す。
+
+    方針: リンク・外観を維持しつつ最速で書き出す。
+      - garbage=1: 未参照オブジェクトのみ削除 (annot 参照は壊さない)
+      - deflate=True: コンテンツストリーム (テキスト) を flate 圧縮
+      - 画像/フォントの再圧縮や重複マージ (garbage=3) は行わない
+      - clean=False / linear=False: 全ページ走査を要する処理はスキップ
+
+    5394 ページ級の doc でも O(変更ページ) のコストで完了する。
+    """
     t0 = time.monotonic()
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    doc.save(str(out_path), garbage=1, deflate=True)
+    doc.save(
+        str(out_path),
+        garbage=1,
+        deflate=True,
+        clean=False,
+        linear=False,
+    )
     return time.monotonic() - t0
+
+
+def _format_size(n: int) -> str:
+    for unit in ("B", "KB", "MB", "GB"):
+        if n < 1024 or unit == "GB":
+            return f"{n:.1f}{unit}" if unit != "B" else f"{n}B"
+        n /= 1024
+    return f"{n:.1f}GB"
 
 
 def run_translation(config: TranslationConfig) -> None:
@@ -933,14 +1000,35 @@ def run_translation(config: TranslationConfig) -> None:
             chunk_failed = _render_chunk(doc, page_data_list)
             total_failed += chunk_failed
 
-            # save チェックポイント: 毎チャンク後に output.pdf を上書き
+            # save チェックポイント: 毎チャンク後に output.pdf を上書き (軽量保存)
             save_time = _save_doc(doc, config.output_pdf)
             print(
                 f"  [{time.monotonic()-start:.0f}s] チャンク保存完了 "
                 f"({save_time:.1f}s) → {config.output_pdf}"
             )
+
+        # 全チャンク完了 — 各チャンクの末尾で `_save_doc` 済みなので
+        # 追加の圧縮保存は行わない (画像/フォント再圧縮を避け常に高速)。
+        size = config.output_pdf.stat().st_size if config.output_pdf.exists() else 0
+        print(
+            f"\n[{time.monotonic()-start:.0f}s] 保存済み → {config.output_pdf}  "
+            f"({_format_size(size)})"
+        )
     except KeyboardInterrupt:
-        print("\n!! 中断検出。これまでのチャンクまでは output.pdf に保存済みです。")
+        # 中断時: チャンク保存と同等の軽量保存で即座に抜ける。
+        # チャンク保存済みデータは既に output にあるので in-progress 分だけ追加で書く。
+        print("\n!! 中断検出。軽量保存を試みます...")
+        try:
+            save_time = _save_doc(doc, config.output_pdf)
+            size = config.output_pdf.stat().st_size if config.output_pdf.exists() else 0
+            print(
+                f"   軽量保存完了 ({save_time:.1f}s) → {config.output_pdf}  "
+                f"({_format_size(size)})"
+            )
+        except KeyboardInterrupt:
+            print("   二度目の中断検出 — 最終保存を打ち切り")
+        except Exception as e:
+            print(f"   最終保存失敗 ({type(e).__name__}: {e}) — 直前のチャンク保存を維持")
         print("   再実行するとキャッシュ経由で翻訳済み分が即時復元されます。")
         raise
     finally:
