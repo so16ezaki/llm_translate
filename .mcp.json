@@ -1,0 +1,26 @@
+{
+  "mcpServers": {
+    "code-review-graph": {
+      "command": "C:\\Users\\so16e\\Documents\\vscode\\python\\analyzeCode\\.venv\\Scripts\\python.exe",
+      "args": [
+        "-m",
+        "code_review_graph",
+        "serve"
+      ],
+      "env": {
+        "PYTHONIOENCODING": "utf-8"
+      }
+    },
+    "repomix": {
+      "command": "C:\\Users\\so16e\\Documents\\vscode\\python\\analyzeCode\\.venv\\Scripts\\python.exe",
+      "args": [
+        "-m",
+        "repomix",
+        "--mcp"
+      ],
+      "env": {
+        "PYTHONIOENCODING": "utf-8"
+      }
+    }
+  }
+}

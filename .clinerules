@@ -1,0 +1,73 @@
+# llm_translate — Cline Rules
+
+## プロジェクト情報
+- 言語: Python
+- フレームワーク: なし
+- パッケージマネージャ: 不明
+- リンター: 未設定
+- テストフレームワーク: 未設定
+
+## セッション開始手順
+1. memory-bank/activeContext.md を読んで現在のコンテキストを把握する
+2. タスクに関連する場合は memory-bank/systemPatterns.md も読む
+3. 必要に応じて下記「コード解析ツール」を使って関連コードを特定する
+
+## コード変更後の手順
+1. リント・フォーマットを実行する
+   ```
+   # リンターコマンドをここに記載
+   ```
+2. テストを実行する
+   ```
+   # テストコマンドをここに記載
+   ```
+3. memory-bank/activeContext.md を更新する
+4. 必要に応じて memory-bank/progress.md を更新する
+
+## コード解析ツール
+
+このプロジェクトは **project-analyzer の venv** にインストールされている repomix と code-review-graph を使う。
+**必ず以下の絶対パス + `-X utf8` フラグで Python を起動すること**。
+- 絶対パス: 解析対象プロジェクトの PATH 上の python には入っていないため必須
+- `-X utf8`: Python UTF-8 Mode を有効化。Windows の cp932 で絵文字出力がクラッシュするのを防ぐ（これを付けないと repomix は必ず失敗する）
+
+```
+PYTHON = C:\Users\so16e\Documents\vscode\python\analyzeCode\.venv\Scripts\python.exe
+```
+
+### モード1: MCP 経由（.mcp.json を自動ロードするエージェント用）
+`.mcp.json` がロードされていれば `code-review-graph` と `repomix` の MCP ツールが直接使える。
+- code-review-graph のツール: `get_minimal_context_tool`, `query_graph_tool`, `get_impact_radius_tool`, `semantic_search_nodes_tool`, `list_graph_stats_tool` 等
+- repomix のツール: `pack_codebase`, `grep_repomix_output`, `read_repomix_output`, `file_system_read_file` 等
+
+### モード2: シェル経由（Cline 等 MCP を自動ロードしないエージェント用）
+**絶対に `python -m repomix` のようにしないこと**。PATH 上の python にはインストールされていないため失敗する。
+**必ず `-X utf8` フラグを付けること**。付けないと Windows で cp932 エンコードエラーになる。
+
+#### code-review-graph (グラフ構築・統計・wiki生成)
+```bash
+"C:\Users\so16e\Documents\vscode\python\analyzeCode\.venv\Scripts\python.exe" -X utf8 -m code_review_graph build
+"C:\Users\so16e\Documents\vscode\python\analyzeCode\.venv\Scripts\python.exe" -X utf8 -m code_review_graph status
+"C:\Users\so16e\Documents\vscode\python\analyzeCode\.venv\Scripts\python.exe" -X utf8 -m code_review_graph wiki
+"C:\Users\so16e\Documents\vscode\python\analyzeCode\.venv\Scripts\python.exe" -X utf8 -m code_review_graph update
+```
+
+#### repomix (コードベース全体を単一ファイルにパック)
+```bash
+"C:\Users\so16e\Documents\vscode\python\analyzeCode\.venv\Scripts\python.exe" -X utf8 -m repomix . --compress --output repomix-output.xml
+```
+生成された `repomix-output.xml` を Read ツールで読むことで全体像を把握できる。`--include` で対象を絞るのが推奨。
+
+## Memory Bank
+- memory-bank/projectbrief.md: プロジェクト概要
+- memory-bank/systemPatterns.md: 設計パターン（自動生成・要確認）
+- memory-bank/activeContext.md: 現在の作業コンテキスト
+- memory-bank/progress.md: 進捗管理
+
+## 禁止事項
+- **`python -m repomix` や `python -m code_review_graph` を PATH の python で呼ばない**（上記の venv 絶対パスを使うこと）
+- **`-X utf8` フラグを省略しない**（Windows で cp932 エラーになる）
+- `chcp 65001` で回避しようとしない（Python 側のエンコーディングには効かない）
+- repomix / code-review-graph を対象プロジェクトの環境に pip install しようとしない（project-analyzer 側に入っているので不要）
+- グラフや pack 出力を使わずにファイルを片っ端から Read しない
+- 推測でコードの依存関係を書かない（必ずグラフから取得する）

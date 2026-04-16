@@ -1,0 +1,25 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"C:\\Users\\so16e\\Documents\\vscode\\python\\analyzeCode\\.venv\\Scripts\\python.exe\" -X utf8 -m code_review_graph update"
+          }
+        ]
+      }
+    ],
+    "PostGitCommit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"C:\\Users\\so16e\\Documents\\vscode\\python\\analyzeCode\\.venv\\Scripts\\python.exe\" -X utf8 -m code_review_graph build"
+          }
+        ]
+      }
+    ]
+  }
+}

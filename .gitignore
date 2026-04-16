@@ -1,0 +1,34 @@
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Output / generated files
+*.pdf
+*.png
+._tmp_*
+
+# Debug files
+page6_*.txt
+
+# Checkpoint data
+.*_checkpoints/
+.*_cache.sqlite3
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Code analysis cache
+.code-review-graph/
+.pytest_cache/
