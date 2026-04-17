@@ -13,6 +13,7 @@ __pycache__/
 *.pdf
 *.png
 ._tmp_*
+!output_stripped.pdf
 
 # Debug files
 page6_*.txt

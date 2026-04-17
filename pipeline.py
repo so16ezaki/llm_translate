@@ -926,19 +926,36 @@ def _save_doc(doc: pymupdf.Document, out_path) -> float:
     """doc を保存し、所要時間を返す。
 
     方針: リンク・外観を維持しつつ最速で書き出す。
-      - garbage=1: 未参照オブジェクトのみ削除 (annot 参照は壊さない)
-      - deflate=True: コンテンツストリーム (テキスト) を flate 圧縮
-      - 画像/フォントの再圧縮や重複マージ (garbage=3) は行わない
+      - StructTreeRoot 削除: タグ付きPDFの構造ツリーは元テキストを保持し続け
+        翻訳後は不整合な「見えないメタデータ」として数百MBを占める。
+        アクセシビリティ以外には無影響なので削除する (最大の削減要因)。
+      - subset_fonts: 使用グリフのみに絞り込み
+      - garbage=2: 重複する間接参照オブジェクトを統合
+      - deflate/deflate_images/deflate_fonts=True: 未圧縮ストリームを flate 圧縮
       - clean=False / linear=False: 全ページ走査を要する処理はスキップ
 
     5394 ページ級の doc でも O(変更ページ) のコストで完了する。
     """
     t0 = time.monotonic()
     out_path.parent.mkdir(parents=True, exist_ok=True)
+    # Tagged PDF の構造ツリーを削除: 翻訳後は元テキストを参照する StructElem が
+    # 残留して数百MB の無駄データになるため。リンク/レイアウトには影響しない。
+    try:
+        catalog = doc.pdf_catalog()
+        for key in ("StructTreeRoot", "MarkInfo"):
+            doc.xref_set_key(catalog, key, "null")
+    except Exception as e:
+        print(f"  [warn] strip StructTreeRoot failed: {e}")
+    try:
+        doc.subset_fonts(verbose=False)
+    except Exception as e:
+        print(f"  [warn] subset_fonts failed: {e}")
     doc.save(
         str(out_path),
-        garbage=1,
+        garbage=2,
         deflate=True,
+        deflate_images=True,
+        deflate_fonts=True,
         clean=False,
         linear=False,
     )

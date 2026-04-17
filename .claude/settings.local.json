@@ -57,7 +57,15 @@
       "Bash(echo \"started pid=$!\")",
       "Read(//tmp/**)",
       "Bash(taskkill //PID 33144 //F)",
-      "Bash(.venv/Scripts/python.exe -X utf8 -c \"import pipeline; print\\('import OK'\\)\")"
+      "Bash(.venv/Scripts/python.exe -X utf8 -c \"import pipeline; print\\('import OK'\\)\")",
+      "Bash(python compress_output.py output.pdf output_compressed.pdf)",
+      "Bash(python compress_g3.py output.pdf output_g3.pdf)",
+      "Bash(python -c ' *)",
+      "Bash(tasklist)",
+      "Bash(python compress_strip_struct.py output.pdf output_stripped.pdf)",
+      "Bash(python analyze_source.py S32K3XXRM.pdf)",
+      "Bash(python -X utf8 -c ' *)",
+      "Bash(git check-ignore *)"
     ]
   }
 }
